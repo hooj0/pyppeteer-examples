@@ -1,6 +1,8 @@
 import os
+os.environ['PYPPETEER_HOME'] = 'D:\Program Files'
 
-print(u'F:\\\u7535\u5b50\u4e66\\[\u7f8e] \u7406\u67e5\u5fb7\xb7\u666e\u96f7\u65af\u987f\\\u8840\u75ab:\u57c3\u535a\u62c9\u7684\u6545\u4e8b (2)')
-path = u'F:\\\u7535\u5b50\u4e66\\[\u7f8e] \u7406\u67e5\u5fb7\xb7\u666e\u96f7\u65af\u987f\\\u8840\u75ab:\u57c3\u535a\u62c9\u7684\u6545\u4e8b (2)'
-
-os.makedirs("F:\\电子书\\[美] 理查德·普雷斯顿\\血疫:埃博拉的故事 (2)")
+# 一定要在导入模块之前配置环境变量
+import pyppeteer.chromium_downloader
+print('默认版本是：{}'.format(pyppeteer.__chromium_revision__))
+print('可执行文件默认路径：{}'.format(pyppeteer.chromium_downloader.chromiumExecutable.get('win64')))
+print('win64平台下载链接为：{}'.format(pyppeteer.chromium_downloader.downloadURLs.get('win64')))
