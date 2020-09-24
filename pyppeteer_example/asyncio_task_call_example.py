@@ -47,12 +47,15 @@ def parser(task):
     print("quote：", pq(".quote").length)
 
 
-func = page_content()
-task = asyncio.ensure_future(func)
-task.add_done_callback(parser)
+tasks = []
+task1 = asyncio.ensure_future(page_content())
+task1.add_done_callback(parser)
+tasks.append(task1)
+
+task2 = asyncio.ensure_future(page_content())
+task2.add_done_callback(parser)
+tasks.append(task2)
 
 # 利用异步方式执行函数
-loop = asyncio.get_event_loop()
-loop.run_until_complete(func)
-loop.close()
+asyncio.get_event_loop().run_until_complete(asyncio.wait(tasks))
 
