@@ -66,7 +66,7 @@ async def main():
     # JS脚本获取 webdriver 状态
     await page.evaluate("""() => { alert(window.navigator.webdriver); }""")
 
-    phone_no = await page.xpath("//form//input[@id='user-mobile']")
+    phone_no = await page.xpath("//form//input[@id='user-mobile3']")
     phone_code = await page.xpath("//form//input[@id='mobile-code']")
     send_code = await page.xpath("//form//span[@class='get-code']")
     submit = await page.xpath("//form//button[1]")
