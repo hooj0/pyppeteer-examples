@@ -1,5 +1,5 @@
-# pyppeteer book
-Use python `ppeteer` lib spider book `douban.com` data.
+# pyppeteer example
+Use python `ppeteer` lib tutorials.
 
 ## 介绍
 
@@ -207,6 +207,10 @@ pip install websockets==8.0
 
 ## 参考
 `Pyppeteer` 参考文档： https://ld246.com/article/1566221786951
+
 `Pyppeteer API` 参考文档：https://github.com/puppeteer/puppeteer/blob/v2.1.1/docs/api.md
+
 `PyQuery API` 参考文档：https://pythonhosted.org/pyquery/api.html
+
 `xpath`选择器参考：https://www.cnblogs.com/huchong/p/10287427.html
+
