@@ -124,7 +124,7 @@ print('可执行文件默认路径：{}'.format(pyppeteer.chromium_downloader.ch
 print('win64平台下载链接为：{}'.format(pyppeteer.chromium_downloader.downloadURLs.get('win64')))
 ```
 
-输入下载地址如下：
+输出下载地址如下：
 
 ```shell
 默认版本是：588429
@@ -177,14 +177,36 @@ await page.close()
 await browser.close()
 ```
 
+### 出现`Navigation Timeout Exceeded: 30000 ms exceeded`超时问题
+
+```shell
+pyppeteer.errors.TimeoutError: Navigation Timeout Exceeded: 30000 ms exceeded.
+```
+
+解决办法可以使用浏览器 `dumpio=True` 参数，缓解卡顿问题，同时让程序在可视化窗口下运行：
+
+```shell
+browser = await launch(headless=False, dumpio=True)
+
+# 或者试试设置超时限制，但有时候还是会超时
+browser = await launch(headless=True, dumpio=True, timeout=(1000 * timeout))
+```
+
+### 出现`argument 'ping_interval'`错误
+
+当运行代码出现`TypeError: create_connection() got an unexpected keyword argument 'ping_interval'`错误时，解决办法可以升级到最新的`websockets`库：
+
+```shell
+pip install -U websockets
+
+#指定安装6.0版本
+pip install websockets==8.0 
+```
+
 
 
 ## 参考
-
 `Pyppeteer` 参考文档： https://ld246.com/article/1566221786951
-
 `Pyppeteer API` 参考文档：https://github.com/puppeteer/puppeteer/blob/v2.1.1/docs/api.md
-
 `PyQuery API` 参考文档：https://pythonhosted.org/pyquery/api.html
-
 `xpath`选择器参考：https://www.cnblogs.com/huchong/p/10287427.html
