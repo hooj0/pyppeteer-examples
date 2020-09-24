@@ -203,8 +203,6 @@ pip install -U websockets
 pip install websockets==8.0 
 ```
 
-
-
 ## 参考
 `Pyppeteer` 参考文档： https://ld246.com/article/1566221786951
 
