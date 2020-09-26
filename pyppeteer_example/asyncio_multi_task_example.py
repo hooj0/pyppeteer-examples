@@ -12,6 +12,19 @@
 # 标题：async multitaskging execute
 # ===============================================================================
 # 使用：利用 pyppeteer 框架同时执行多个任务并返回结果
+#
+#     task_urls = [
+#         "https://www.baidu.com",
+#         "https://www.qq.com",
+#     ]
+#
+#     tasks = (html(task_url, 300) for task_url in task_urls)
+#
+#     loop = asyncio.get_event_loop()
+#     results = loop.run_until_complete(asyncio.gather(*tasks))
+#
+#     for result in results:
+#         print("{} result: {}".format(result["title"], result))
 # -------------------------------------------------------------------------------
 # 描述：尝试利用异步方式同时执行多个爬虫，并返回正常的结果
 # -------------------------------------------------------------------------------
