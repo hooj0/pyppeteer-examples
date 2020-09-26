@@ -12,6 +12,18 @@
 # 标题：disable web browser webdriver detect
 # ===============================================================================
 # 使用：利用 pyppeteer 框架参数禁止被爬网站进行 webdriver 的检测
+#
+#     # 利用浏览器执行特定脚本，绕过 webdriver 检测
+#     await page.evaluate("""() => {
+#         Object.defineProperties(navigator, {
+#             webdriver: {
+#                     get: () => false
+#                 }
+#             })
+#     }""")
+#
+#     # JS脚本获取 webdriver 状态
+#     await page.evaluate("""() => { alert(window.navigator.webdriver); }""")
 # -------------------------------------------------------------------------------
 # 描述：设置参数，绕过服务器的 webdriver 检测操作
 # -------------------------------------------------------------------------------
