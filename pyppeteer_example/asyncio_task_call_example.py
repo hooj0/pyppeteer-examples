@@ -12,6 +12,18 @@
 # 标题：asyncio task callback function
 # ===============================================================================
 # 使用：利用 pyppeteer 框架结合协程完成异步回调
+#
+# tasks = []
+# task1 = asyncio.ensure_future(page_content())
+# task1.add_done_callback(parser)
+# tasks.append(task1)
+#
+# task2 = asyncio.ensure_future(page_content())
+# task2.add_done_callback(parser)
+# tasks.append(task2)
+#
+# # 利用异步方式执行函数
+# asyncio.get_event_loop().run_until_complete(asyncio.wait(tasks))
 # -------------------------------------------------------------------------------
 # 描述：利用Python协程实现异步回调
 # -------------------------------------------------------------------------------
@@ -36,6 +48,12 @@ async def page_content():
 
     # 获取网页内容，关键一步
     content = await page.content()
+
+    # 关闭网页
+    await page.close()
+    # 关闭浏览器
+    await browser.close()
+
     return content
 
 
