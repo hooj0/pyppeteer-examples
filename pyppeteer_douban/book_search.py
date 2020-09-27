@@ -3,7 +3,7 @@
 # @author: hoojo
 # @email:    hoojo_@126.com
 # @github:   https://github.com/hooj0
-# @create date: 2020-09-22
+# @create date: 2020-09-24
 # @copyright by hoojo @2020
 # @changelog use pyppeteer search `douban` book
 
@@ -117,7 +117,7 @@ async def search(text):
         print("title: %s, content: %s" % (title, len(content)))
 
         name = await page.Jeval("div#wrapper h1", "node => node.innerText")
-        author = await page.Jeval("div#wrapper div#info a[href^='/author/']", "node => node.innerText")
+        author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
 
         score = await page.Jeval("div#interest_sectl strong.rating_num", "node => node.innerText")
         star = await page.Jeval("div#interest_sectl div.rating_right div.ll", "node => node.className.replace('ll bigstar', '')")
