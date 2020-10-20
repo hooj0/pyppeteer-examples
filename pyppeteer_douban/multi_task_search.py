@@ -239,6 +239,11 @@ async def book_producer(size, queue, file_dir):
 
 
 async def book_spider(file_dir, consumer_num=1, queue_size=5):
+    """
+        :param file_dir: 查询的文件目录，目录中存放已有的书籍信息
+        :param consumer_num: 消费者数量，数量越多并发越多
+        :param queue_size: 队列大小
+    """
     print("[book spider] run...")
 
     # 创建一个队列，最大的长度是 size
@@ -291,7 +296,7 @@ loop = asyncio.get_event_loop()
 
 try:
     print("going event loop")
-    result = loop.run_until_complete(book_spider("f:/book-files", queue_size=5, consumer_num=1))
+    result = loop.run_until_complete(book_spider("f:/book-files", queue_size=20, consumer_num=1))
     print("result: ", result)
 
     book_rename(result)
