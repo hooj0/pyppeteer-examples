@@ -17,7 +17,9 @@
 # -------------------------------------------------------------------------------
 import asyncio
 import re
-import queue
+import os
+import shutil
+import random
 from pyppeteer import launch
 
 
@@ -47,24 +49,24 @@ def extract(book_info):
     isbn = re.findall(r"ISBN:(.*?)\n", book_info)
 
     return {
-        "nick_name": "".join(nick_name).strip(),
+        "nick_name": "".join(nick_name).replace('"', '”').strip(),
         "publish_org": "".join(publish_org).strip(),
         "publish_date": "".join(publish_date).strip(),
         "price": "".join(price).strip(),
-        "isbn": "".join(isbn).strip()
+        "isbn": "".join(isbn).strip(),
     }
 
 
-async def request(text, page):
+async def request(n, text, page):
     # 设置请求URL
     url = f"https://search.douban.com/book/subject_search?search_text={text}&cat=1001"
     # 地址栏跳转到当前网址
     response = await page.goto(url)
-    print("request url: ", response.url)
+    print("[book consumer-%s] request url: %s" % (n, response.url))
 
     # 获取网页内容
     content = await page.content()
-    print("search: %s, content: %s" % (await page.title(), len(content)))
+    print("[book consumer-%s] search: %s, content: %s" % (n, await page.title(), len(content)))
 
     subject = await page.J("#wrapper div.item-root > a[href^='https://book.douban.com/subject/']")
     if subject:
@@ -79,38 +81,53 @@ async def request(text, page):
 
         title = await page.title()
         content = await page.content()
-        print("title: %s, content: %s" % (title, len(content)))
+        print("[book consumer-%s] title: %s, content: %s" % (n, title, len(content)))
 
         interest_sectl = await page.J("div#interest_sectl")
         if not interest_sectl:
-            print("非图书，无法提取到相关记录：%s\n" % text)
+            print("[book consumer-%s] 非图书，无法提取到相关记录：%s\n" % (n, text))
             return None
 
         name = await page.Jeval("div#wrapper h1", "node => node.innerText")
-        author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
+        # author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
+        author = await page.JJeval("div#wrapper div#info > span:nth-child(1) a[href]", """nodes => {
+            var authors = [];
+            nodes.forEach(function (item) {
+                authors.push(item.innerText);
+            });
+            return authors.join(" & ");
+        }""")
 
         score = await page.Jeval("div#interest_sectl strong.rating_num", "node => node.innerText")
         star = await page.Jeval("div#interest_sectl div.rating_right div.ll", "node => node.className.replace('ll bigstar', '')")
-        num = await page.Jeval("div#interest_sectl div.rating_right a.rating_people", "node => node.innerText")
+        # num = await page.Jeval("div#interest_sectl div.rating_right a.rating_people span", "node => node.innerText")
+        num = await page.Jeval("div#interest_sectl div.rating_right", "node => node.innerText")
 
-        tags = await page.Jeval("div#wrapper div#db-tags-section div.indent", "node => node.innerText")
+        tags = ""
+        tags_el = await page.J("div#wrapper div#db-tags-section")
+        if tags_el:
+            tags = await tags_el.Jeval("div.indent", "node => node.innerText")
 
         book_info_text = await page.Jeval("div#wrapper div#info", "node => node.textContent")
         book_info = extract(book_info_text)
-        print("book info: ", book_info)
+        print("[book consumer-%s] book info: %s" % (n, book_info))
 
         book = {
-            "name": name, "author": author,
+            "name": name.replace('"', '”'), "author": author,
             "score": score, "star": star, "num": num,
             "tags": tags.replace(" ", "").replace("\xa0", ", ")
         }
 
-        print("book: ", book)
+        # print("[book consumer-%s] book: %s\n" % (n, book))
+
+        book.update(book_info)
+        return book
     else:
-        print("没有搜索到相关记录：", text)
+        print("[book consumer-%s] 没有搜索到相关记录：%s\n" % (n, text))
+        return None
 
 
-async def search(queue):
+async def search(book_names):
 
     # 获取屏幕尺寸
     width, height = screen_size()
@@ -125,30 +142,8 @@ async def search(queue):
     # 设置 user-agent 模拟浏览器操作
     await page.setUserAgent("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.132 Safari/537.36")
 
-    #for text in text_list:
-    #    await request(text, page)
-
-    i = 0
-    print("[consumer-%s] start " % i)
-
-    while True:
-        print("[consumer-%s] waiting " % i)
-
-        item = await queue.get()
-        print("[consumer-%s] get queue: %s" % (i, item))
-
-        await request(item, page)
-
-        queue.task_done()
-        if item is None:
-            # queue.task_done()
-            break
-        else:
-            await asyncio.sleep(0.01 * item)
-            # queue.task_done()
-            print("[consumer-%s] sleep" % i)
-
-    print("[consumer-%s] finished " % i)
+    for book in book_names:
+        await request(book, page)
 
     await asyncio.sleep(100)
     # 关闭浏览器
@@ -158,8 +153,12 @@ async def search(queue):
 # -------------------------------------------------------------------------------
 # 队列写入，读取操作
 # -------------------------------------------------------------------------------
-async def consumer(i, queue):
-    print("[consumer-%s] start " % i)
+async def book_consumer(n, queue):
+    """
+        电子书订阅者，获取图书信息队列中的书籍信息，去豆瓣图书中提取图书的详细信息
+    """
+
+    print("[book consumer-%s] start " % n)
 
     # 获取屏幕尺寸
     width, height = screen_size()
@@ -174,71 +173,132 @@ async def consumer(i, queue):
     # 设置 user-agent 模拟浏览器操作
     await page.setUserAgent("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.132 Safari/537.36")
 
+    # 创建一个集合存储书籍信息
+    book_metadata = {}
     while True:
-        print("[consumer-%s] waiting " % i)
+        print("[book consumer-%s] waiting" % n)
 
-        item = await queue.get()
-        print("[consumer-%s] get queue: %s" % (i, item))
+        book = await queue.get()
+        print("[book consumer-%s] get queue data: %s" % (n, book))
 
-        queue.task_done()
-        if item is None:
-            # queue.task_done()
+        if book is None:
+            queue.task_done()
             break
         else:
-            await asyncio.sleep(0.01 * item)
-            # queue.task_done()
-            print("[consumer-%s] sleep" % i)
+            await asyncio.sleep(random.randint(1, 6))
+            print("[book consumer-%s] sleep" % n)
 
-    print("[consumer-%s] finished " % i)
+            book_data = await request(n, book["book_name"], page)
+            print("[book consumer-%s] return book data: %s" % (n, book_data))
 
-    await asyncio.sleep(100)
+            book_metadata[book["file_path"]] = book_data
+
+            queue.task_done()
+
+    # print("[book consumer-%s] book metadata: %s" % (n, book_metadata))
+    print("[book consumer-%s] finished " % n)
+
+    # await asyncio.sleep(20)
     # 关闭浏览器
     await browser.close()
 
+    return book_metadata
 
-async def producer(size, queue):
-    print("[producer] start")
 
-    for i in range(3 * size):
-        await queue.put(i)
-        print("[producer] queue put: ", i)
+async def book_producer(size, queue, file_dir):
+    """
+        电子书信息生产者，扫描指定目录下的图书文件，将图书名称保存到队列中
+    """
 
-    print("[producer] queue put None stopped")
+    print("[book producer] start")
+
+    if not file_dir:
+        print("[book producer] file dir is None!")
+        return
+
+    for root, dirs, files in os.walk(file_dir):
+        for file in files:
+            # print("[book producer] find file: %s" % file)
+
+            file_path = os.path.join(root, file)
+            book_name = file.split(".")[0]
+
+            if book_name is not None:
+                book = {"book_name": book_name, "filename": file, "file_path": file_path}
+
+                await queue.put(book)
+                print("[book producer] queue put: ", book)
+
+    print("[book producer] queue put None stopped")
     for _ in range(size):
         await queue.put(None)
 
-    print("[producer] queue join clear")
+    print("[book producer] queue join clear")
     await queue.join()
-    print("[producer] finished")
+    print("[book producer] finished")
 
 
-async def call_work(size):
-    print("[call_work] run...")
+async def book_spider(file_dir, consumer_num=1, queue_size=5):
+    print("[book spider] run...")
 
     # 创建一个队列，最大的长度是 size
-    queue = asyncio.Queue(maxsize=size)
+    queue = asyncio.Queue(maxsize=queue_size)
     # 创建消费者
-    # consumers = [loop.create_task(consumer(i, queue)) for i in range(size)]
-    consumers = loop.create_task(search(queue))
+    consumers = [loop.create_task(book_consumer(i, queue)) for i in range(1, consumer_num + 1)]
     # 创建一个生产者的任务
-    producers = loop.create_task(producer(size, queue))
+    producers = loop.create_task(book_producer(consumer_num, queue, file_dir))
 
-    print("[call_work] wait consumers/producers run")
+    print("[book spider] wait consumers/producers run")
     # 等待consumers, producers 所有的函数执行完成
-    await asyncio.wait([consumers, producers])
+    done, pending = await asyncio.wait(consumers + [producers])
+    # 获取返回值，包装成集合
+    book_metadata = {}
+    for task in done:
+        if task.result():
+            book_metadata.update(task.result())
 
-    print("[call_work] run finished")
+    print("[book spider] run finished")
+    return book_metadata
+
+
+def book_rename(book_metadata):
+
+    for book_file_name, book in book_metadata.items():
+        # print("key: %s, value: %s" % (book_file_name, book))
+        if not book:
+            continue
+
+        src = book_file_name
+        suffix = book_file_name.split(".")[-1]
+        if book["nick_name"]:
+            dst_file = "{author}-{name}：{nick_name}.{0}".format(suffix, **book)
+        else:
+            dst_file = "{author}-{name}.{0}".format(suffix, **book)
+
+        dst = os.path.join(os.path.dirname(src), "rename", dst_file)
+        print("%s ===>>> %s" % (src, dst))
+
+        dst = os.path.join("rename-book-files", dst_file)
+        if not os.path.exists(os.path.dirname(dst)):
+            os.makedirs(os.path.dirname(dst))
+
+        # os.rename(src, dst)
+        # shutil.move(src, dst)
+        shutil.copy(src, dst)
 
 
 loop = asyncio.get_event_loop()
 
 try:
     print("going event loop")
-    loop.run_until_complete(call_work(1))
+    result = loop.run_until_complete(book_spider("f:/book-files", queue_size=5, consumer_num=1))
+    print("result: ", result)
+
+    book_rename(result)
 finally:
     print("close event loop")
-    # loop.close()
+    loop.close()
 
 # 利用异步方式执行函数
-text_list = ["传", "afafdafd", "人民", "小狗钱钱"]
-# asyncio.get_event_loop().run_until_complete(search())
+# text_list = ["传", "afafdafd", "人民", "小狗钱钱"]
+# asyncio.get_event_loop().run_until_complete(search(text_list))
