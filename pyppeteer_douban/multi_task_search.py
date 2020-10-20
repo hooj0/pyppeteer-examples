@@ -73,6 +73,9 @@ async def request(n, text, page):
         # html = await page.Jeval("#wrapper div.item-root > a[href^='https://book.douban.com/subject/']", "node => node.outerHTML")
         # print("subject html: ", html)
 
+        # 休眠1秒
+        await asyncio.sleep(1)
+
         # 等待新页面加载完成
         await asyncio.gather(
             page.waitForNavigation(),
@@ -89,7 +92,6 @@ async def request(n, text, page):
             return None
 
         name = await page.Jeval("div#wrapper h1", "node => node.innerText")
-        # author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
         author = await page.JJeval("div#wrapper div#info > span:nth-child(1) a[href]", """nodes => {
             var authors = [];
             nodes.forEach(function (item) {
@@ -97,6 +99,9 @@ async def request(n, text, page):
             });
             return authors.join(" & ");
         }""")
+
+        if not author:
+            author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
 
         score = await page.Jeval("div#interest_sectl strong.rating_num", "node => node.innerText")
         star = await page.Jeval("div#interest_sectl div.rating_right div.ll", "node => node.className.replace('ll bigstar', '')")
@@ -110,7 +115,7 @@ async def request(n, text, page):
 
         book_info_text = await page.Jeval("div#wrapper div#info", "node => node.textContent")
         book_info = extract(book_info_text)
-        print("[book consumer-%s] book info: %s" % (n, book_info))
+        # print("[book consumer-%s] book info: %s" % (n, book_info))
 
         book = {
             "name": name.replace('"', '”'), "author": author,
@@ -185,7 +190,7 @@ async def book_consumer(n, queue):
             queue.task_done()
             break
         else:
-            await asyncio.sleep(random.randint(1, 6))
+            await asyncio.sleep(random.randint(2, 6))
             print("[book consumer-%s] sleep" % n)
 
             book_data = await request(n, book["book_name"], page)
@@ -288,8 +293,8 @@ def book_rename(book_metadata):
             os.makedirs(os.path.dirname(dst))
 
         # os.rename(src, dst)
-        # shutil.move(src, dst)
-        shutil.copy(src, dst)
+        shutil.move(src, dst)
+        # shutil.copy(src, dst)
 
 
 loop = asyncio.get_event_loop()
