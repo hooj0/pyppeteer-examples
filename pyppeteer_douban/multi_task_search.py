@@ -70,11 +70,6 @@ async def request(n, text, page):
 
     subject = await page.J("#wrapper div.item-root > a[href^='https://book.douban.com/subject/']")
     if subject:
-        # html = await page.Jeval("#wrapper div.item-root > a[href^='https://book.douban.com/subject/']", "node => node.outerHTML")
-        # print("subject html: ", html)
-
-        # 休眠1秒
-        await asyncio.sleep(1)
 
         # 等待新页面加载完成
         await asyncio.gather(
@@ -190,11 +185,11 @@ async def book_consumer(n, queue):
             queue.task_done()
             break
         else:
-            await asyncio.sleep(random.randint(2, 6))
+            await asyncio.sleep(random.randint(2, 5))
             print("[book consumer-%s] sleep" % n)
 
             book_data = await request(n, book["book_name"], page)
-            print("[book consumer-%s] return book data: %s" % (n, book_data))
+            print("[book consumer-%s] return book data: %s\n" % (n, book_data))
 
             book_metadata[book["file_path"]] = book_data
 
@@ -285,16 +280,22 @@ def book_rename(book_metadata):
         else:
             dst_file = "{author}-{name}.{0}".format(suffix, **book)
 
-        dst = os.path.join(os.path.dirname(src), "rename", dst_file)
-        print("%s ===>>> %s" % (src, dst))
+        tag = ""
+        if book["tags"]:
+            tag = "、".join(book["tags"].split(",")[0:2])
 
-        dst = os.path.join("rename-book-files", dst_file)
+        # dst = os.path.join(os.path.dirname(src), "rename", dst_file)
+        dst = os.path.join("rename-book-files", tag, dst_file)
+        print("%s ===>>> %s" % (src, dst))
         if not os.path.exists(os.path.dirname(dst)):
             os.makedirs(os.path.dirname(dst))
 
-        # os.rename(src, dst)
-        shutil.move(src, dst)
-        # shutil.copy(src, dst)
+        try:
+            # os.rename(src, dst)
+            # shutil.copy(src, dst)
+            shutil.move(src, dst)
+        except FileNotFoundError as e:
+            print(src, "文件不存在", e)
 
 
 loop = asyncio.get_event_loop()
@@ -308,7 +309,3 @@ try:
 finally:
     print("close event loop")
     loop.close()
-
-# 利用异步方式执行函数
-# text_list = ["传", "afafdafd", "人民", "小狗钱钱"]
-# asyncio.get_event_loop().run_until_complete(search(text_list))
