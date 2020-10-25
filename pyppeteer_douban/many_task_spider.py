@@ -268,6 +268,8 @@ loop = asyncio.get_event_loop()
 try:
     print("going event loop")
     loop.run_until_complete(book_spider("f:/book-files", queue_size=100, consumer_num=1, renamed=True))
+except Exception as e:
+    print(e)
 finally:
     print("close event loop")
     loop.close()
