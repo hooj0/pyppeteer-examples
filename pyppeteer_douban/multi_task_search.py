@@ -306,6 +306,8 @@ try:
     print("result: ", result)
 
     book_rename(result)
+except Exception as e:
+    print(e)
 finally:
     print("close event loop")
     loop.close()
