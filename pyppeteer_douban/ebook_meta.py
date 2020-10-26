@@ -15,27 +15,32 @@
 # terminal command:
 #       python ebook_meta.py file
 #       python ebook_meta.py dir
-#       python ebook_meta.py -v dir
+#       python ebook_meta.py -d dir
 # -------------------------------------------------------------------------------
 # 描述：利用 pyppeteer 框架进行豆瓣图书查询，并设置电子书元数据
 # -------------------------------------------------------------------------------
+from pyppeteer import launch
 import asyncio
 import re
 import os
+import getopt
 import sys
-import shutil
-from pyppeteer import launch
 
 
 # -------------------------------------------------------------------------------
 # 构建单任务查询图书操作
 # -------------------------------------------------------------------------------
+log_mode = "info"
+
+
 def debug(message, *args):
-    print("[DEBUG]" + message, *args)
+    if log_mode.lower() == "debug":
+        print("[DEBUG]" + message, *args)
 
 
 def info(message, *args):
-    print("[INFO]" + message, *args)
+    if log_mode.lower() == "info" or log_mode.lower() == "debug":
+        print("[INFO]" + message, *args)
 
 
 def screen_size():
@@ -54,19 +59,75 @@ def screen_size():
 
 
 def extract(book_info):
-    nick_name = re.findall(r"副标题:(.*?)\n", book_info)
+    subtitle = re.findall(r"副标题:(.*?)\n", book_info)
     publish_org = re.findall(r"出版社:(.*?)\n", book_info)
     publish_date = re.findall(r"出版年:(.*?)\n", book_info)
     price = re.findall(r"定价:(.*?)\n", book_info)
     isbn = re.findall(r"ISBN:(.*?)\n", book_info)
+    series = re.findall(r"丛书:(.*?)\n", book_info)
 
     return {
-        "nick_name": "".join(nick_name).strip(),
-        "publish_org": "".join(publish_org).strip(),
-        "publish_date": "".join(publish_date).strip(),
+        "subtitle": "".join(subtitle).strip(),
+        "publisher": "".join(publish_org).strip(),
+        "date": "".join(publish_date).strip(),
         "price": "".join(price).strip(),
-        "isbn": "".join(isbn).strip()
+        "isbn": "".join(isbn).strip(),
+        "series": "".join(series).strip(),
     }
+
+
+async def request_book_detail(text, link, page):
+    response = await page.goto(link, {"timeout": 0})
+    info("[request] request url: %s" % response.url)
+
+    title = await page.title()
+    content = await page.content()
+    info("[request] title: %s, content: %s" % (title, len(content)))
+
+    interest_sectl = await page.J("div#interest_sectl")
+    if not interest_sectl:
+        info("[request] 非图书，无法提取到相关记录：%s\n" % text)
+        return None
+
+    await page.waitFor("div#content")
+
+    name = await page.Jeval("div#wrapper h1", "node => node.innerText")
+    authors = await page.JJeval("div#wrapper div#info > span:nth-child(1) a[href]", """nodes => {
+            var authors = [];
+            nodes.forEach(function (item) {
+                authors.push(item.innerText);
+            });
+            return authors.join(" ");
+        }""")
+
+    if not authors:
+        authors = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
+
+    rating = await page.Jeval("div#interest_sectl strong.rating_num", "node => node.innerText")
+    star = await page.Jeval("div#interest_sectl div.rating_right div.ll", "node => node.className.replace('ll bigstar', '')")
+    num = await page.Jeval("div#interest_sectl div.rating_right", "node => node.innerText")
+
+    comments, content_el = "", await page.J("div.related_info div.intro")
+    if content_el:
+        comments = await page.Jeval("div.related_info div.intro", "node => node.innerText")
+
+    tags, tags_el = "", await page.J("div#wrapper div#db-tags-section")
+    if tags_el:
+        tags = await tags_el.Jeval("div.indent", "node => node.innerText")
+
+    book_info_text = await page.Jeval("div#wrapper div#info", "node => node.textContent")
+    book_info = extract(book_info_text)
+
+    book = {
+        "title": name.replace('"', '”'), "authors": authors,
+        "rating": rating, "star": star, "num": num, "comments": comments,
+        "tags": tags.replace(" ", "").replace("\xa0", ", ")
+    }
+
+    book.update(book_info)
+
+    debug("[request] book: %s\n" % book)
+    return book
 
 
 async def request_book(text, page):
@@ -77,65 +138,22 @@ async def request_book(text, page):
     info("[request] request url: %s" % response.url)
     # 获取网页内容
     content = await page.content()
-    info("[request] search: %s, content: %s" % (await page.title(), len(content)))
-    await asyncio.sleep(0.5)
+    info("[request] search: %s, content: %s\n" % (await page.title(), len(content)))
 
-    subject = await page.J("#wrapper div.item-root a[href^='https://book.douban.com/subject/']")
-    if subject:
+    subjects = await page.JJ("#wrapper div.item-root div.detail a[href^='https://book.douban.com/subject/']")
+    if subjects:
+        links = []
+        for subject in subjects:
+            links.append(await (await subject.getProperty("href")).jsonValue())
 
-        # 等待新页面加载完成
-        await asyncio.gather(
-            page.waitForNavigation(),
-            subject.click(),
-        )
+        books = []
+        for link in links[0:5]:
+            book = await request_book_detail(text, link, page)
+            if book:
+                books.append(book)
+            await asyncio.sleep(1)
 
-        title = await page.title()
-        content = await page.content()
-        info("[request] title: %s, content: %s" % (title, len(content)))
-        await asyncio.sleep(0.5)
-
-        interest_sectl = await page.J("div#interest_sectl")
-        if not interest_sectl:
-            info("[request] 非图书，无法提取到相关记录：%s\n" % text)
-            return None
-
-        name = await page.Jeval("div#wrapper h1", "node => node.innerText")
-        author = await page.JJeval("div#wrapper div#info > span:nth-child(1) a[href]", """nodes => {
-            var authors = [];
-            nodes.forEach(function (item) {
-                authors.push(item.innerText);
-            });
-            return authors.join(" ");
-        }""")
-
-        if not author:
-            author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
-
-        score = await page.Jeval("div#interest_sectl strong.rating_num", "node => node.innerText")
-        star = await page.Jeval("div#interest_sectl div.rating_right div.ll", "node => node.className.replace('ll bigstar', '')")
-        num = await page.Jeval("div#interest_sectl div.rating_right", "node => node.innerText")
-
-        comment = await page.Jeval("div.related_info div.intro", "node => node.innerText")
-
-        tags = ""
-        tags_el = await page.J("div#wrapper div#db-tags-section")
-        if tags_el:
-            tags = await tags_el.Jeval("div.indent", "node => node.innerText")
-
-        book_info_text = await page.Jeval("div#wrapper div#info", "node => node.textContent")
-        book_info = extract(book_info_text)
-        # debug("[request] book info: %s" % book_info)
-
-        book = {
-            "name": name.replace('"', '”'), "author": author,
-            "score": score, "star": star, "num": num, "comment": comment,
-            "tags": tags.replace(" ", "").replace("\xa0", ", ")
-        }
-
-        # debug("[request] book: %s\n" % book)
-
-        book.update(book_info)
-        return book
+        return books
     else:
         info("[request] 没有搜索到相关记录：%s\n" % text)
         return None
@@ -147,14 +165,14 @@ def rename_book(book_metadata):
         if not book:
             continue
 
-        src = book_file_name
-        suffix = src.split(".")[-1]
-        if book["nick_name"]:
-            dst_file = "{author}-{name}：{nick_name}.{0}".format(suffix, **book)
+        src, suffix = book_file_name, book_file_name.split(".")[-1]
+        if book["subtitle"]:
+            dst_file = "{authors}-{title}：{subtitle}.{0}".format(suffix, **book)
         else:
-            dst_file = "{author}-{name}.{0}".format(suffix, **book)
+            dst_file = "{authors}-{title}.{0}".format(suffix, **book)
 
-        dst = os.path.join(os.path.dirname(src), "rename", dst_file)
+        # dst = os.path.join(os.path.dirname(src), "rename", dst_file)
+        dst = os.path.join(os.path.dirname(src), dst_file)
         debug("[rename] %s ===>>> %s" % (src, dst))
 
         if not os.path.exists(os.path.dirname(dst)):
@@ -162,7 +180,6 @@ def rename_book(book_metadata):
 
         try:
             os.rename(src, dst)
-            # shutil.copy(src, dst)
         except FileNotFoundError as e:
             info("[rename] ", src, "文件不存在", e)
 
@@ -171,6 +188,8 @@ async def exec_command(*args):
     debug("[command] start run cmd")
 
     buffer = bytearray()
+    debug("[command] ebook-meta ", *args)
+
     cmd_process = asyncio.create_subprocess_exec("ebook-meta", *args, stdout=asyncio.subprocess.PIPE)
     proc = await cmd_process
 
@@ -189,9 +208,55 @@ async def exec_command(*args):
 
     if not return_code:
         cmd_output = bytes(buffer).decode("gbk")
+        print("\n\n元数据信息如下：")
+        print("=======================================================================")
         print(cmd_output)
 
     return return_code
+
+
+async def choose_book(books, book_file_path):
+
+    def print_book(book):
+        print("==================================== %s ===============================" % book["title"])
+        print("title: ", book["title"])
+        print("subtitle: ", book["subtitle"])
+        print("authors: ", book["authors"])
+        print("tags: ", book["tags"])
+        print("rating: ", book["rating"])
+        print("star: ", book["star"])
+        print("num: ", book["num"])
+        print("price: ", book["price"])
+        print("isbn: ", book["isbn"])
+        print("publisher: ", book["publisher"])
+        print("date: ", book["date"])
+        print("series: ", book["series"])
+        print("comments: ", book["comments"])
+        print("\n")
+
+    # 打印书籍信息
+    for i in range(len(books)):
+        print("=======================================================================")
+        print("图书序号：", i)
+        print_book(books[i])
+
+    # 显示元数据信息
+    return_code = await exec_command(book_file_path)
+    debug("[choose book] 返回码: ", return_code)
+
+    if return_code != 0:
+        return None
+
+    # 选择图书信息
+    index = 0
+    if len(books) > 0:
+        index = int(input("请选择书籍元数据[0-%s]之间的数字: \n" % len(books)))
+    book = books[index]
+
+    print("你选择了书籍：", book["title"])
+    print_book(book)
+
+    return book
 
 
 async def modify_meta(file, page):
@@ -201,16 +266,18 @@ async def modify_meta(file, page):
     async def book_metadata(book_file, book_file_path):
         book_name = book_file.split(".")[0]
 
-        book = await request_book(book_name, page)
-        if not book:
+        books = await request_book(book_name, page)
+        if not books:
             exception_files.append(book_file_path)
             return None
+
+        book = await choose_book(books, book_file_path)
         debug("[modify meta] book: %s\n" % book)
 
         metadata = [
-            "-t", book["name"], "-a", book["author"], "-c", book["comment"],
+            "-t", book["title"], "-a", book["authors"], "-c", book["comments"], "-s", book["series"],
             "--identifier", "isbn:" + book["isbn"], "--isbn", book["isbn"], "--tags", book["tags"],
-            "-p", book["publish_org"], "-d", book["publish_date"], "-r", str(int(book["star"]) * 0.1),
+            "-p", book["publisher"], "-d", book["date"], "-r", str(int(book["star"]) * 0.1),
                             ]
         return_code = await exec_command(book_file_path, *metadata)
         debug("[modify meta] 返回码: ", return_code)
@@ -234,7 +301,8 @@ async def modify_meta(file, page):
                     await book_metadata(item, file_path)
                     print("\n======================================================================================\n")
 
-    info("[modify meta] 元数据修改异常书籍: ", exception_files)
+    if exception_files:
+        info("[modify meta] 元数据修改无效的书籍: ", exception_files)
 
 
 async def run_browser(file):
@@ -258,13 +326,77 @@ async def run_browser(file):
     await browser.close()
 
 
-# 获取事件循环
-if os.name == 'nt':
-    loop = asyncio.ProactorEventLoop()
-    asyncio.set_event_loop(loop)
-else:
-    loop = asyncio.get_event_loop()
+def run(file):
+    # 获取事件循环
+    if os.name == 'nt':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
 
-loop.run_until_complete(run_browser("book-files/"))
-# loop.run_until_complete(run_browser("book-files/杨国荣-成己与成物.mobi"))
-# loop.run_until_complete(exec_command("book-files/杨国荣-成己与成物.mobi", *["-c", " "]))
+    loop.run_until_complete(run_browser(file))
+    # loop.run_until_complete(run_browser("book-files/"))
+    # loop.run_until_complete(run_browser("book-files/杨国荣-成己与成物.mobi"))
+
+
+def main(argv):
+    # print('argv: %s' % argv)
+
+    help_usage = '''
+    USAGE: python ebook_meta.py [OPTIONS] -h --log debug [COMMAND] command [FILE] file
+    
+    OPTIONS: 
+      -h,--help                  use the help manual.
+      -l,--log debug,info,none   print ebook metadata debug log, print ebook metadata info log. default: info mode
+      
+    COMMANDS:
+      help        use the help manual
+        
+    EXAMPLES: 
+      python ebook_meta.py -h
+      python ebook_meta.py help
+    
+      python ebook_meta.py /home/ebook/hello.epub
+      python ebook_meta.py /home/ebook/
+      
+      python ebook_meta.py -l debug /home/ebook/hello.epub
+      python ebook_meta.py -l info /home/ebook/hello.epub
+      
+      python ebook_meta.py --log debug /home/ebook/
+    '''
+
+    # default run current path
+    if len(argv) < 1:
+        run(".")
+        sys.exit()
+
+    try:
+        long_opts = ["help", "log="]
+        opts, args = getopt.getopt(argv, "hl:", long_opts)
+        # print('opts: %s, args: %s' % (opts, args))
+    except getopt.GetoptError:
+        print(help_usage)
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ('-h', '--help'):
+            print(help_usage)
+            sys.exit()
+        elif opt in ("-l", "--log"):
+            global log_mode
+            log_mode = arg
+
+    for arg in args:
+        if arg == 'help':
+            print(help_usage)
+            sys.exit()
+        else:
+            run(arg)
+
+    if len(args) < 0:
+        print(help_usage)
+        sys.exit()
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
