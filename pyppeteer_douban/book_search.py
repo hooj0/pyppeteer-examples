@@ -97,8 +97,8 @@ async def search(text):
     print("request url: ", response.url)
 
     # 获取网页内容
-    content = await page.content()
-    print("title: %s, content: %s" % (await page.title(), len(content)))
+    # content = await page.content()
+    print("title: %s, content: %s" % (await page.title(), response.ok))
 
     subject = await page.J("#wrapper div.item-root > a[href^='https://book.douban.com/subject/']")
     if subject:
@@ -112,9 +112,7 @@ async def search(text):
             subject.click(),
         )
 
-        title = await page.title()
-        content = await page.content()
-        print("title: %s, content: %s" % (title, len(content)))
+        print("title: %s, ok: %s" % (await page.title(), response.ok))
 
         name = await page.Jeval("div#wrapper h1", "node => node.innerText")
         author = await page.Jeval("div#wrapper div#info a[href]", "node => node.innerText")
