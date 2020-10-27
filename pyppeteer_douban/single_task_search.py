@@ -93,8 +93,7 @@ async def search(text_list):
             )
 
             title = await page.title()
-            content = await page.content()
-            print("title: %s, content: %s" % (title, len(content)))
+            print("title: %s" % title)
 
             interest_sectl = await page.J("div#interest_sectl")
             if not interest_sectl:
