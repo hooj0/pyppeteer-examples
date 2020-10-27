@@ -46,10 +46,7 @@ async def request(page, text):
     # 地址栏跳转到当前网址
     response = await page.goto(url)
     print("request url: ", response.url)
-
-    # 获取网页内容
-    content = await page.content()
-    print("title: %s, content: %s" % (await page.title(), len(content)))
+    print("title: %s, ok: %s" % (await page.title(), response.ok))
 
     await page.click("a.select-control")
 
