@@ -63,10 +63,7 @@ async def request(n, text, page):
     # 地址栏跳转到当前网址
     response = await page.goto(url)
     print("[book consumer-%s] request url: %s" % (n, response.url))
-
-    # 获取网页内容
-    content = await page.content()
-    print("[book consumer-%s] search: %s, content: %s" % (n, await page.title(), len(content)))
+    print("[book consumer-%s] search: %s, content: %s" % (n, await page.title(), response.ok))
 
     subject = await page.J("#wrapper div.item-root > a[href^='https://book.douban.com/subject/']")
     if subject:
@@ -78,8 +75,7 @@ async def request(n, text, page):
         )
 
         title = await page.title()
-        content = await page.content()
-        print("[book consumer-%s] title: %s, content: %s" % (n, title, len(content)))
+        print("[book consumer-%s] title: %s" % (n, title))
 
         interest_sectl = await page.J("div#interest_sectl")
         if not interest_sectl:
