@@ -15,7 +15,7 @@
 # terminal command:
 #       python ebook_meta.py file
 #       python ebook_meta.py dir
-#       python ebook_meta.py -d dir
+#       python ebook_meta.py -l info dir
 # -------------------------------------------------------------------------------
 # 描述：利用 pyppeteer 框架进行豆瓣图书查询，并设置电子书元数据
 # -------------------------------------------------------------------------------
@@ -25,12 +25,13 @@ import re
 import os
 import getopt
 import sys
+import term
 
 
 # -------------------------------------------------------------------------------
 # 构建单任务查询图书操作
 # -------------------------------------------------------------------------------
-log_mode = "info"
+log_mode = "none"
 
 
 def debug(message, *args):
@@ -78,18 +79,19 @@ def extract(book_info):
 
 async def request_book_detail(text, link, page):
     response = await page.goto(link, {"timeout": 0})
-    info("[request] request url: %s" % response.url)
+    info("[detail] request url: %s" % response.url)
 
     title = await page.title()
-    content = await page.content()
-    info("[request] title: %s, content: %s" % (title, len(content)))
+    info("[detail] title: %s, ok: %s" % (title, response.ok))
+
+    await page.waitFor("div#content", timeout=0)
+    # response = await page.waitForResponse(response.url)
+    # response.ok
 
     interest_sectl = await page.J("div#interest_sectl")
     if not interest_sectl:
-        info("[request] 非图书，无法提取到相关记录：%s\n" % text)
+        info("[detail] 非图书，无法提取到相关记录：%s\n" % text)
         return None
-
-    await page.waitFor("div#content")
 
     name = await page.Jeval("div#wrapper h1", "node => node.innerText")
     authors = await page.JJeval("div#wrapper div#info > span:nth-child(1) a[href]", """nodes => {
@@ -126,7 +128,7 @@ async def request_book_detail(text, link, page):
 
     book.update(book_info)
 
-    debug("[request] book: %s\n" % book)
+    debug("[detail] book: %s\n" % book)
     return book
 
 
@@ -134,11 +136,9 @@ async def request_book(text, page):
     # 设置请求URL
     url = f"https://search.douban.com/book/subject_search?search_text={text}&cat=1001"
     # 地址栏跳转到当前网址
-    response = await page.goto(url)
+    response = await page.goto(url, {"timeout": 0})
     info("[request] request url: %s" % response.url)
-    # 获取网页内容
-    content = await page.content()
-    info("[request] search: %s, content: %s\n" % (await page.title(), len(content)))
+    info("[request] search: %s, ok: %s\n" % (await page.title(), response.ok))
 
     subjects = await page.JJ("#wrapper div.item-root div.detail a[href^='https://book.douban.com/subject/']")
     if subjects:
@@ -208,37 +208,39 @@ async def exec_command(*args):
 
     if not return_code:
         cmd_output = bytes(buffer).decode("gbk")
-        print("\n\n元数据信息如下：")
-        print("=======================================================================")
-        print(cmd_output)
+        term.writeLine("\n书籍元数据信息如下：", term.green, term.bold)
+        print("====" * 30)
+        term.write(cmd_output, term.bgwhite, term.bold, term.black)
+        print("====" * 30)
 
     return return_code
 
 
 async def choose_book(books, book_file_path):
 
-    def print_book(book):
-        print("==================================== %s ===============================" % book["title"])
-        print("title: ", book["title"])
-        print("subtitle: ", book["subtitle"])
-        print("authors: ", book["authors"])
-        print("tags: ", book["tags"])
-        print("rating: ", book["rating"])
-        print("star: ", book["star"])
-        print("num: ", book["num"])
-        print("price: ", book["price"])
-        print("isbn: ", book["isbn"])
-        print("publisher: ", book["publisher"])
-        print("date: ", book["date"])
-        print("series: ", book["series"])
-        print("comments: ", book["comments"])
+    def print_book(i, book):
+        text = term.format("图书序号：", term.cyan, term.bold) \
+               + term.format(i, term.red, term.bold) \
+               + term.format(", 书名：%s" % book["title"], term.yellow, term.bold)
+        print("====" * 10 + "<<<" * 3, text, ">>>" * 3 + "====" * 10)
+        term.writeLine("||  title: %s" % book["title"], term.red)
+        term.writeLine("||  subtitle: %s" % book["subtitle"], term.red)
+        term.writeLine("||  authors: %s" % book["authors"], term.red)
+        term.writeLine("||  tags: %s" % book["tags"], term.red)
+        term.writeLine("||  rating: %s" % book["rating"], term.magenta)
+        term.writeLine("||  star: %s" % book["star"], term.magenta)
+        term.writeLine("||  num: %s" % book["num"], term.magenta)
+        term.writeLine("||  price: %s" % book["price"], term.blue)
+        term.writeLine("||  isbn: %s" % book["isbn"], term.blue)
+        term.writeLine("||  publisher: %s" % book["publisher"], term.yellow)
+        term.writeLine("||  date: %s" % book["date"], term.yellow)
+        term.writeLine("||  series: %s" % book["series"], term.yellow)
+        term.writeLine("||  comments: %s" % book["comments"], term.white)
         print("\n")
 
     # 打印书籍信息
     for i in range(len(books)):
-        print("=======================================================================")
-        print("图书序号：", i)
-        print_book(books[i])
+        print_book(i, books[i])
 
     # 显示元数据信息
     return_code = await exec_command(book_file_path)
@@ -250,11 +252,15 @@ async def choose_book(books, book_file_path):
     # 选择图书信息
     index = 0
     if len(books) > 0:
-        index = int(input("请选择书籍元数据[0-%s]之间的数字: \n" % len(books)))
+        text = term.format("\n\n请选择书籍元数据", term.red, term.bold) \
+               + term.format("[0-%s]" % len(books), term.yellow, term.bold) \
+               + term.format("之间的数字: ", term.red, term.bold)
+        term.writeLine(text)
+        index = int(input())
     book = books[index]
 
-    print("你选择了书籍：", book["title"])
-    print_book(book)
+    term.writeLine("你选择了书籍：%s" % book["title"], term.blue, term.bold)
+    print_book(index, book)
 
     return book
 
@@ -296,13 +302,13 @@ async def modify_meta(file, page):
         else:
             for root, dirs, files in os.walk(file):
                 for item in files:
-                    debug("[modify meta] 发现新文件: ", item)
+                    term.writeLine("发现新文件: %s" % item, term.yellow, term.underscore)
                     file_path = os.path.join(root, item)
                     await book_metadata(item, file_path)
-                    print("\n======================================================================================\n")
+                    term.writeLine("\n\n\n" + "####" * 30, term.cyan)
 
     if exception_files:
-        info("[modify meta] 元数据修改无效的书籍: ", exception_files)
+        info("[modify meta] 元数据修改无效的图书: ", exception_files)
 
 
 async def run_browser(file):
@@ -335,8 +341,6 @@ def run(file):
         loop = asyncio.get_event_loop()
 
     loop.run_until_complete(run_browser(file))
-    # loop.run_until_complete(run_browser("book-files/"))
-    # loop.run_until_complete(run_browser("book-files/杨国荣-成己与成物.mobi"))
 
 
 def main(argv):
@@ -347,7 +351,7 @@ def main(argv):
     
     OPTIONS: 
       -h,--help                  use the help manual.
-      -l,--log debug,info,none   print ebook metadata debug log, print ebook metadata info log. default: info mode
+      -l,--log debug,info,none   print ebook metadata debug log, print ebook metadata info log. default: none
       
     COMMANDS:
       help        use the help manual
@@ -399,4 +403,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    #main(sys.argv[1:])
+    run("book-files/")
