@@ -31,7 +31,7 @@ import term
 # -------------------------------------------------------------------------------
 # 构建单任务查询图书操作
 # -------------------------------------------------------------------------------
-log_mode = "none"
+log_mode = "info"
 
 
 def debug(message, *args):
@@ -151,7 +151,7 @@ async def request_book(text, page):
             book = await request_book_detail(text, link, page)
             if book:
                 books.append(book)
-            await asyncio.sleep(1)
+            await asyncio.sleep(1.5)
 
         return books
     else:
@@ -316,8 +316,8 @@ async def run_browser(file):
     # 获取屏幕尺寸
     width, height = screen_size()
     # 启动浏览器
-    # browser = await launch()
-    browser = await launch(headless=False, dumpio=True, args=["--disable-infobars", "--start-maximized"])
+    browser = await launch()
+    # browser = await launch(headless=False, dumpio=True, args=["--disable-infobars", "--start-maximized"])
     # 打开一个新页面
     page = await browser.newPage()
     # 设置页面视图大小
@@ -351,7 +351,7 @@ def main(argv):
     
     OPTIONS: 
       -h,--help                  use the help manual.
-      -l,--log debug,info,none   print ebook metadata debug log, print ebook metadata info log. default: none
+      -l,--log debug,info,none   print ebook metadata debug log, print ebook metadata info log. default: info
       
     COMMANDS:
       help        use the help manual
@@ -403,5 +403,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    #main(sys.argv[1:])
-    run("book-files/")
+    main(sys.argv[1:])
