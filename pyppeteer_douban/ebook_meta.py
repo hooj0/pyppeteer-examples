@@ -175,8 +175,9 @@ def rename_book(book_metadata):
         dst = os.path.join(os.path.dirname(src), dst_file)
         debug("[rename] %s ===>>> %s" % (src, dst))
 
-        if not os.path.exists(os.path.dirname(dst)):
-            os.makedirs(os.path.dirname(dst))
+        dst_dir = os.path.dirname(dst)
+        if dst_dir and not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
 
         try:
             os.rename(src, dst)
@@ -316,8 +317,7 @@ async def run_browser(file):
     # 获取屏幕尺寸
     width, height = screen_size()
     # 启动浏览器
-    browser = await launch()
-    # browser = await launch(headless=False, dumpio=True, args=["--disable-infobars", "--start-maximized"])
+    browser = await launch(headless=True, dumpio=True, args=["--disable-infobars", "--start-maximized"])
     # 打开一个新页面
     page = await browser.newPage()
     # 设置页面视图大小
